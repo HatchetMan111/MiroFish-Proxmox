@@ -13,6 +13,11 @@ set -euo pipefail
 
 # ---------------------------------------------------------------- Variables --
 APP="MiroFish"
+# Version des Installers. Das Host-Script prueft diesen Marker nach dem
+# Download (Schutz vor veraltetem CDN-Cache bei raw.githubusercontent.com).
+# Bei jeder Aenderung hier: Version erhoehen + EXPECTED_INSTALLER_VERSION
+# in install/mirofish.sh angleichen.
+INSTALLER_VERSION="2026-09-05-fix3"
 APP_DIR="/opt/mirofish"
 APP_REPO="${APP_REPO:-https://github.com/666ghj/MiroFish.git}"
 APP_BRANCH="${APP_BRANCH:-main}"
@@ -51,6 +56,7 @@ export PATH="/root/.local/bin:/usr/local/bin:/usr/local/sbin:${PATH}"
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 # ------------------------------------------------------------------ System ---
+log "Installer-Version: ${INSTALLER_VERSION}"
 log "OS-Check ..."
 cat /etc/os-release | head -n3 || true
 

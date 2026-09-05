@@ -15,6 +15,13 @@ set -euo pipefail
 APP="MiroFish"
 REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/HatchetMan111/MiroFish-Proxmox/main}"
 INNER_SCRIPT_PATH="install/mirofish-install.sh"
+# Muss zu INSTALLER_VERSION in install/mirofish-install.sh passen.
+# Schutz vor veraltetem raw.githubusercontent.com-Cache: Bei Mismatch wird
+# NICHT stillschweigend eine alte Version installiert, sondern neu geladen
+# (Retry) bzw. per GitHub-API-Fallback geholt oder abgebrochen.
+EXPECTED_INSTALLER_VERSION="2026-09-05-fix3"
+GITHUB_REPO="${GITHUB_REPO:-HatchetMan111/MiroFish-Proxmox}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
 
 CTID="${CTID:-150}"
 HOSTNAME="${HOSTNAME:-mirofish}"
@@ -123,10 +130,43 @@ done
 # ------------------------------------------------------- Inner script push ---
 TMP_INNER="$(mktemp)"
 trap 'rm -f "${TMP_INNER:-}"' EXIT
-INNER_URL="${REPO_RAW_BASE}/${INNER_SCRIPT_PATH}"
-log "Lade Installer: ${INNER_URL}"
-if ! wget -qO "${TMP_INNER}" "${INNER_URL}"; then
-  die "Konnte ${INNER_URL} nicht laden. REPO_RAW_BASE pruefen (derzeit: ${REPO_RAW_BASE})."
+
+installer_hat_marker() {
+  grep -q "INSTALLER_VERSION=\"${EXPECTED_INSTALLER_VERSION}\"" "${TMP_INNER}" 2>/dev/null
+}
+
+# raw.githubusercontent.com cacht aggressiv (Query-String-Bypass wirkt nicht
+# zuverlaessig). Deshalb: Version marker pruefen, Retry mit Wartezeit, danach
+# Fallback ueber die GitHub-Contents-API (base64, eigener Cache, i.d.R. frisch).
+INNER_OK=0
+for attempt in $(seq 1 6); do
+  INNER_URL="${REPO_RAW_BASE}/${INNER_SCRIPT_PATH}?cb=${RANDOM}$(date +%s)"
+  log "Lade Installer (Versuch ${attempt}/6): ${REPO_RAW_BASE}/${INNER_SCRIPT_PATH}"
+  if wget -qO "${TMP_INNER}" "${INNER_URL}" && installer_hat_marker; then
+    log "Installer-Version ${EXPECTED_INSTALLER_VERSION} bestaetigt."
+    INNER_OK=1
+    break
+  fi
+  log "Installer-Version ${EXPECTED_INSTALLER_VERSION} noch nicht im CDN (veralteter Cache), warte 20s ..."
+  sleep 20
+done
+
+if [[ "${INNER_OK}" != "1" ]]; then
+  log "Fallback: lade Installer ueber GitHub-API ..."
+  API_JSON="$(mktemp)"
+  if curl -fsSL --max-time 30 \
+      "https://api.github.com/repos/${GITHUB_REPO}/contents/${INNER_SCRIPT_PATH}?ref=${GITHUB_BRANCH}" \
+      -o "${API_JSON}" \
+    && python3 -c "import json,base64,sys; d=json.load(open('${API_JSON}')); sys.stdout.buffer.write(base64.b64decode(d['content']))" > "${TMP_INNER}" \
+    && installer_hat_marker; then
+    log "Installer per API-Fallback geladen (Version ${EXPECTED_INSTALLER_VERSION} bestaetigt)."
+    INNER_OK=1
+  fi
+  rm -f "${API_JSON}"
+fi
+
+if [[ "${INNER_OK}" != "1" ]]; then
+  die "Geladener Installer hat NICHT Version ${EXPECTED_INSTALLER_VERSION} (CDN-Cache veraltet). 5-10 Min warten und erneut laufen lassen. Diagnose: wget -qO- ${REPO_RAW_BASE}/${INNER_SCRIPT_PATH} | grep INSTALLER_VERSION"
 fi
 bash -n "${TMP_INNER}" || die "Syntaxfehler im geladenen Installer (bash -n fehlgeschlagen)."
 pct push "${CTID}" "${TMP_INNER}" /root/mirofish-install.sh
