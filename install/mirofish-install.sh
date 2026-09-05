@@ -44,6 +44,11 @@ log() { echo "[${APP}] $*"; }
 die() { echo "[${APP}] FEHLER: $*" >&2; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
+# pct exec setzt nur ein minimales PATH (ohne /root/.local/bin, teils ohne
+# /usr/local/bin). Deshalb PATH hier explizit erweitern, sonst ist frisch
+# installiertes uv/node-Zubehoer im selben Lauf nicht auffindbar.
+export PATH="/root/.local/bin:/usr/local/bin:/usr/local/sbin:${PATH}"
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 # ------------------------------------------------------------------ System ---
 log "OS-Check ..."
@@ -71,14 +76,18 @@ fi
 log "Node: $(node -v), npm: $(npm -v)"
 
 # ---------------------------------------------------------------------- uv ---
-if command -v uv >/dev/null 2>&1; then
-  log "uv bereits installiert: $(uv --version) (idempotent)."
+UV_BIN="$(command -v uv 2>/dev/null || echo /root/.local/bin/uv)"
+if [[ -x "${UV_BIN}" ]]; then
+  log "uv bereits installiert: $(${UV_BIN} --version) (idempotent, kein Reinstall)."
 else
   log "Installiere uv ..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ln -sf /root/.local/bin/uv /usr/local/bin/uv
+  hash -r
+  UV_BIN="$(command -v uv 2>/dev/null || echo /root/.local/bin/uv)"
+  [[ -x "${UV_BIN}" ]] || die "uv-Installation fehlgeschlagen (weder im PATH noch unter /root/.local/bin/uv)."
 fi
-log "uv: $(uv --version)"
+log "uv: $(${UV_BIN} --version) (${UV_BIN})"
 
 # -------------------------------------------------------------- App checkout --
 if [[ -d "${APP_DIR}/.git" ]]; then
@@ -116,7 +125,7 @@ fi
 # ------------------------------------------------------------ Backend setup --
 log "Backend: uv sync ..."
 cd "${APP_DIR}/backend"
-uv sync --frozen
+"${UV_BIN}" sync --frozen
 VENV_PY="${APP_DIR}/backend/.venv/bin/python"
 [[ -x "${VENV_PY}" ]] || die "venv-Python fehlt: ${VENV_PY}"
 log "Backend venv: $(${VENV_PY} --version)"
