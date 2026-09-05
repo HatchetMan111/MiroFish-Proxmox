@@ -17,7 +17,7 @@ APP="MiroFish"
 # Download (Schutz vor veraltetem CDN-Cache bei raw.githubusercontent.com).
 # Bei jeder Aenderung hier: Version erhoehen + EXPECTED_INSTALLER_VERSION
 # in install/mirofish.sh angleichen.
-INSTALLER_VERSION="2026-09-05-fix4"
+INSTALLER_VERSION="2026-09-05-fix5"
 APP_DIR="/opt/mirofish"
 APP_REPO="${APP_REPO:-https://github.com/666ghj/MiroFish.git}"
 APP_BRANCH="${APP_BRANCH:-main}"
@@ -64,7 +64,7 @@ cat /etc/os-release | head -n3 || true
 # sentence-transformers -> torch). Vorher Platz pruefen statt mitten im
 # 'uv sync' mit 'No space left on device' zu sterben.
 MIN_FREE_GB=8
-FREE_GB="$(df -BG / 2>/dev/null | awk 'NR==2{gsub(/G/,\"\",$4); print $4}')"
+FREE_GB="$(df -BG / 2>/dev/null | awk 'NR==2 { gsub(/G/, "", $4); print $4 }')"
 log "Freier Plattenplatz: ${FREE_GB}G (mindestens ${MIN_FREE_GB}G noetig)."
 if [[ "${FREE_GB}" -lt "${MIN_FREE_GB}" ]]; then
   df -h / /opt || true
