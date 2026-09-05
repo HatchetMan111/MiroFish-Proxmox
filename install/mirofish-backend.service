@@ -1,0 +1,16 @@
+[Unit]
+Description=MiroFish Backend (Flask, Port 5001)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mirofish/backend
+EnvironmentFile=/opt/mirofish/.env
+ExecStart=/opt/mirofish/backend/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
