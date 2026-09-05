@@ -17,7 +17,7 @@ APP="MiroFish"
 # Download (Schutz vor veraltetem CDN-Cache bei raw.githubusercontent.com).
 # Bei jeder Aenderung hier: Version erhoehen + EXPECTED_INSTALLER_VERSION
 # in install/mirofish.sh angleichen.
-INSTALLER_VERSION="2026-09-05-fix5"
+INSTALLER_VERSION="2026-09-05-fix6"
 APP_DIR="/opt/mirofish"
 APP_REPO="${APP_REPO:-https://github.com/666ghj/MiroFish.git}"
 APP_BRANCH="${APP_BRANCH:-main}"
@@ -233,22 +233,51 @@ systemctl restart mirofish-backend
 
 # ----------------------------------------------------------------- Verify ----
 log "Verifikation: Service + HTTP-Checks ..."
-sleep 3
 systemctl is-active --quiet mirofish-backend \
   || { journalctl -u mirofish-backend --no-pager -n 100; die "mirofish-backend ist nicht active."; }
 log "systemctl is-active mirofish-backend: $(systemctl is-active mirofish-backend)"
 
-# Backend direkt (Platzhalter-Keys: /health antwortet auch ohne echte Keys)
-if curl -fsS --max-time 10 "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null; then
+# Backend direkt (Platzhalter-Keys: /health antwortet auch ohne echte Keys).
+# Der Erststart dauert lange (torch/transformers/camel-Imports, 30-120s),
+# deshalb Polling statt festem sleep: bis zu 5 Min warten.
+BACKEND_OK=0
+for i in $(seq 1 60); do
+  if curl -fsS --max-time 10 "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null 2>&1; then
+    BACKEND_OK=1
+    break
+  fi
+  # Restart-Loop erkennen: mehr als 3 Starts in kurzer Zeit = Crash-Loop, nicht warten.
+  RESTARTS="$(systemctl show mirofish-backend -p NRestarts --value 2>/dev/null || echo 0)"
+  if [[ "${RESTARTS}" -gt 3 ]]; then
+    log "Backend crasht beim Start (NRestarts=${RESTARTS}), breche Warten ab."
+    break
+  fi
+  if [[ "$((i % 10))" == "0" ]]; then log "Warte auf Backend ... (${i}x5s, Restarts: ${RESTARTS})"; fi
+  sleep 5
+done
+if [[ "${BACKEND_OK}" == "1" ]]; then
   log "Backend-Check OK: http://localhost:${BACKEND_PORT}/health antwortet."
   curl -fsS --max-time 10 "http://127.0.0.1:${BACKEND_PORT}/health" || true
 else
-  journalctl -u mirofish-backend --no-pager -n 100
+  echo "--- systemctl status ---"
+  systemctl status mirofish-backend --no-pager || true
+  echo "--- journal (100) ---"
+  journalctl -u mirofish-backend --no-pager -n 100 || true
+  echo "--- listener ---"
+  ss -tlnp 2>/dev/null | grep -E "${BACKEND_PORT}|${FRONTEND_PORT}" || ss -tlnp || true
   die "Backend antwortet nicht auf localhost:${BACKEND_PORT}/health."
 fi
 
-# Frontend via nginx
-if curl -fsS --max-time 10 "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null; then
+# Frontend via nginx (kurzes Polling, nginx ist i.d.R. sofort da)
+FRONTEND_OK=0
+for i in $(seq 1 12); do
+  if curl -fsS --max-time 10 "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null 2>&1; then
+    FRONTEND_OK=1
+    break
+  fi
+  sleep 5
+done
+if [[ "${FRONTEND_OK}" == "1" ]]; then
   log "Frontend-Check OK: http://localhost:${FRONTEND_PORT}/ antwortet."
 else
   journalctl -u nginx --no-pager -n 50 || true
