@@ -17,7 +17,7 @@ APP="MiroFish"
 # Download (Schutz vor veraltetem CDN-Cache bei raw.githubusercontent.com).
 # Bei jeder Aenderung hier: Version erhoehen + EXPECTED_INSTALLER_VERSION
 # in install/mirofish.sh angleichen.
-INSTALLER_VERSION="2026-09-05-fix3"
+INSTALLER_VERSION="2026-09-05-fix4"
 APP_DIR="/opt/mirofish"
 APP_REPO="${APP_REPO:-https://github.com/666ghj/MiroFish.git}"
 APP_BRANCH="${APP_BRANCH:-main}"
@@ -60,11 +60,24 @@ log "Installer-Version: ${INSTALLER_VERSION}"
 log "OS-Check ..."
 cat /etc/os-release | head -n3 || true
 
+# MiroFish zieht torch/CUDA-Wheels (mehrere GB via camel-oasis ->
+# sentence-transformers -> torch). Vorher Platz pruefen statt mitten im
+# 'uv sync' mit 'No space left on device' zu sterben.
+MIN_FREE_GB=8
+FREE_GB="$(df -BG / 2>/dev/null | awk 'NR==2{gsub(/G/,\"\",$4); print $4}')"
+log "Freier Plattenplatz: ${FREE_GB}G (mindestens ${MIN_FREE_GB}G noetig)."
+if [[ "${FREE_GB}" -lt "${MIN_FREE_GB}" ]]; then
+  df -h / /opt || true
+  du -sh /root/.cache /opt 2>/dev/null || true
+  die "Zu wenig Plattenplatz (frei: ${FREE_GB}G, noetig: ${MIN_FREE_GB}G). Auf dem Proxmox-Host: pct resize <CTID> rootfs +8G, dann erneut laufen lassen."
+fi
+
 log "APT: update + Basis-Abhaengigkeiten ..."
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl wget git iproute2 procps \
   build-essential python3 nginx openssl
+apt-get clean
 
 # -------------------------------------------------------------------- Node ---
 if command -v node >/dev/null 2>&1; then
@@ -131,7 +144,13 @@ fi
 # ------------------------------------------------------------ Backend setup --
 log "Backend: uv sync ..."
 cd "${APP_DIR}/backend"
+# Reste frueherer abgebrochener Downloads entfernen (sonst belegen
+# .tmp-Verzeichnisse im uv-Cache weiter Platz).
+rm -rf /root/.cache/uv/.tmp* 2>/dev/null || true
 "${UV_BIN}" sync --frozen
+# uv-Cache nach erfolgreichem Sync verschlanken (nvidia/torch-Wheels
+# liegen sonst doppelt: Cache + .venv).
+"${UV_BIN}" cache prune --ci || "${UV_BIN}" cache clean
 VENV_PY="${APP_DIR}/backend/.venv/bin/python"
 [[ -x "${VENV_PY}" ]] || die "venv-Python fehlt: ${VENV_PY}"
 log "Backend venv: $(${VENV_PY} --version)"
@@ -144,6 +163,7 @@ if [[ -d node_modules ]]; then
 fi
 npm ci
 npm run build
+npm cache clean --force
 [[ -f "${APP_DIR}/frontend/dist/index.html" ]] || die "Frontend-Build fehlgeschlagen: dist/index.html fehlt."
 log "Frontend-Build OK: $(du -sh "${APP_DIR}/frontend/dist" | cut -f1) in frontend/dist"
 

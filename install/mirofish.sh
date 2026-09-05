@@ -19,7 +19,7 @@ INNER_SCRIPT_PATH="install/mirofish-install.sh"
 # Schutz vor veraltetem raw.githubusercontent.com-Cache: Bei Mismatch wird
 # NICHT stillschweigend eine alte Version installiert, sondern neu geladen
 # (Retry) bzw. per GitHub-API-Fallback geholt oder abgebrochen.
-EXPECTED_INSTALLER_VERSION="2026-09-05-fix3"
+EXPECTED_INSTALLER_VERSION="2026-09-05-fix4"
 GITHUB_REPO="${GITHUB_REPO:-HatchetMan111/MiroFish-Proxmox}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
 
@@ -28,7 +28,7 @@ HOSTNAME="${HOSTNAME:-mirofish}"
 CPU="${CPU:-4}"
 RAM="${RAM:-4096}"
 SWAP="${SWAP:-512}"
-DISK="${DISK:-12}"
+DISK="${DISK:-20}"
 STORAGE="${STORAGE:-local-lvm}"          # rootfs storage
 TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"  # vztmpl storage
 BRIDGE="${BRIDGE:-vmbr0}"
@@ -111,6 +111,22 @@ fi
 
 # onboot immer sicherstellen (reboot-sicher, Anforderung #6)
 pct set "${CTID}" --onboot "${ONBOOT}" || true
+
+# Disk sicherstellen: MiroFish zieht torch/CUDA-Wheels (mehrere GB).
+# Bei existierendem Container mit kleinerer Platte automatisch vergroessern.
+ROOTFS_LINE="$(pct config "${CTID}" 2>/dev/null | grep -E '^rootfs:' || true)"
+if [[ "${ROOTFS_LINE}" =~ size=([0-9]+)G ]]; then
+  CUR_GB="${BASH_REMATCH[1]}"
+  if [[ "${CUR_GB}" -lt "${DISK}" ]]; then
+    ADD_GB=$((DISK - CUR_GB + 1))
+    log "Vergroessere rootfs von ${CUR_GB}G auf ~${DISK}G (+${ADD_GB}G) ..."
+    pct resize "${CTID}" rootfs "+${ADD_GB}G"
+  else
+    log "rootfs (${CUR_GB}G) gross genug (idempotent, kein Resize)."
+  fi
+else
+  log "WARNUNG: rootfs-Groesse nicht erkannt (${ROOTFS_LINE:-leer}). Erwartet: >=${DISK}G. Falls 'No space left on device' auftritt: pct resize ${CTID} rootfs +8G"
+fi
 
 # ------------------------------------------------------------------ Start ----
 if [[ "$(pct status "${CTID}" | awk '{print $2}')" != "running" ]]; then

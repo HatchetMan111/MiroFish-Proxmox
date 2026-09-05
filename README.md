@@ -4,7 +4,8 @@ Lokale, einzeilige Installation von [MiroFish](https://github.com/666ghj/MiroFis
 (schwärmintelligente Simulations-Engine, Python-Flask-Backend + Vue/Vite-Frontend)
 als **LXC-Container** auf Proxmox VE.
 
-- **Standard:** LXC, Debian 12, 4 vCPU, 4 GB RAM, 12 GB Disk, unprivileged, `onboot: 1`
+- **Standard:** LXC, Debian 12, 4 vCPU, 4 GB RAM, 20 GB Disk, unprivileged, `onboot: 1`
+  (20 GB wegen torch/CUDA-Abhängigkeiten; bestehende Container werden per `pct resize` automatisch vergrößert)
 - **Modus:** Production-Build (`npm run build` → nginx auf `:3000`, Backend `:5001`)
 - **Keys:** Platzhalter-`.env` (keine interaktive Abfrage) — echte Keys nach der Installation eintragen
 
@@ -23,7 +24,7 @@ Nützliche Varianten:
 
 ```bash
 # andere CT-ID / Ressourcen (Variablen oben im Script, alle per Env übersteuerbar)
-CTID=150 CPU=4 RAM=4096 DISK=12 STORAGE=local-lvm BRIDGE=vmbr0 \
+CTID=150 CPU=4 RAM=4096 DISK=20 STORAGE=local-lvm BRIDGE=vmbr0 \
   bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/MiroFish-Proxmox/main/install/mirofish.sh)"
 
 # anderer Upstream-Branch/Fork von MiroFish (im Container-Script)
