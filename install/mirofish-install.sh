@@ -17,7 +17,7 @@ APP="MiroFish"
 # Download (Schutz vor veraltetem CDN-Cache bei raw.githubusercontent.com).
 # Bei jeder Aenderung hier: Version erhoehen + EXPECTED_INSTALLER_VERSION
 # in install/mirofish.sh angleichen.
-INSTALLER_VERSION="2026-09-05-fix6"
+INSTALLER_VERSION="2026-09-05-fix7"
 APP_DIR="/opt/mirofish"
 APP_REPO="${APP_REPO:-https://github.com/666ghj/MiroFish.git}"
 APP_BRANCH="${APP_BRANCH:-main}"
@@ -162,7 +162,12 @@ if [[ -d node_modules ]]; then
   log "node_modules existiert -> npm ci laeuft trotzdem sauber durch (reproduzierbar)."
 fi
 npm ci
-npm run build
+# Wichtig: Das Frontend ruft die API sonst absolut unter http://localhost:5001
+# auf (Fallback in src/api/index.js) – das waere im Browser der eigene PC,
+# nicht der Container. Mit VITE_API_BASE_URL=/ werden relative URLs gebaut,
+# die ueber denselben Origin (:3000) laufen und vom nginx-/api/-Proxy an das
+# Backend (:5001) weitergereicht werden.
+VITE_API_BASE_URL=/ npm run build
 npm cache clean --force
 [[ -f "${APP_DIR}/frontend/dist/index.html" ]] || die "Frontend-Build fehlgeschlagen: dist/index.html fehlt."
 log "Frontend-Build OK: $(du -sh "${APP_DIR}/frontend/dist" | cut -f1) in frontend/dist"

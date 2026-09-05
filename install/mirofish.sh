@@ -19,7 +19,7 @@ INNER_SCRIPT_PATH="install/mirofish-install.sh"
 # Schutz vor veraltetem raw.githubusercontent.com-Cache: Bei Mismatch wird
 # NICHT stillschweigend eine alte Version installiert, sondern neu geladen
 # (Retry) bzw. per GitHub-API-Fallback geholt oder abgebrochen.
-EXPECTED_INSTALLER_VERSION="2026-09-05-fix6"
+EXPECTED_INSTALLER_VERSION="2026-09-05-fix7"
 GITHUB_REPO="${GITHUB_REPO:-HatchetMan111/MiroFish-Proxmox}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
 

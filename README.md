@@ -58,16 +58,26 @@ Danach: `http://<LXC-IP>:3000` öffnen.
 
 ## API-Keys nachtragen (Pflicht)
 
-Ohne echte Keys startet das Backend mit Platzhaltern, echte Simulationen schlagen fehl:
+MiroFish hat **keine Einstellungs-UI für Keys** (verifiziert im Upstream-Code:
+keine Settings-Seite, kein Config-Endpunkt – nur Graph/Simulation/Report-APIs).
+Die Keys stehen ausschließlich in der `.env`-Datei auf dem Container:
 
 ```bash
 pct enter 150
-nano /opt/mirofish/.env   # LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME, ZEP_API_KEY
+nano /opt/mirofish/.env
 systemctl restart mirofish-backend
-journalctl -u mirofish-backend -f
+journalctl -u mirofish-backend -f   # Start beobachten
 curl -fsS http://127.0.0.1:5001/health
-curl -fsS http://127.0.0.1:3000/ | head
 ```
+
+| Variable | Wofür | Woher |
+|---|---|---|
+| `LLM_API_KEY` | Pflicht: treibt Agenten/Simulation | OpenAI-kompatibler Anbieter, z. B. [Alibaba Bailian](https://bailian.console.aliyun.com/) (`qwen-plus`), OpenAI, DeepSeek o. ä. |
+| `LLM_BASE_URL` | API-Endpunkt (OpenAI-Format) | z. B. `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `LLM_MODEL_NAME` | Modellname | z. B. `qwen-plus` |
+| `ZEP_API_KEY` | Pflicht: Agenten-Gedächtnis (Knowledge-Graph) | [app.getzep.com](https://app.getzep.com/) (Free-Quota reicht für einfache Nutzung) |
+
+Hinweis: Upstream warnt vor hohem Verbrauch – erste Simulationen mit < 40 Runden testen.
 
 ## Update
 
